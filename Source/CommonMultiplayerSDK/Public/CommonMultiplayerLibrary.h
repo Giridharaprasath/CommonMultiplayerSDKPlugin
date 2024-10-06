@@ -22,6 +22,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Multiplayer", meta = ( WorldContext="WorldContextObject" ))
 	static void CreateMultiplayerSession(const UObject* WorldContextObject, ULocalPlayer* LocalPlayer,
 	                                     FSessionSettingsInfo SessionSettingsInfo);
+
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer", meta = ( WorldContext="WorldContextObject" ))
+	static void DestroyMultiplayerSession(const UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintCallable, Category = "Multiplayer", meta = ( WorldContext="WorldContextObject" ))
+	static bool UseLanMode(const UObject* WorldContextObject);
 		
 private:
 	static UMultiplayerGameInstanceSubsystem* GetMultiplayerGameInstanceSubsystem(const UObject* WorldContextObject);
