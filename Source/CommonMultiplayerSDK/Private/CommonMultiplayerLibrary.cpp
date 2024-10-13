@@ -17,15 +17,21 @@ void UCommonMultiplayerLibrary::DestroyMultiplayerSession(const UObject* WorldCo
 	GetMultiplayerGameInstanceSubsystem(WorldContextObject)->DestroyMultiplayerSession();
 }
 
+void UCommonMultiplayerLibrary::FindMultiplayerSession(const UObject* WorldContextObject, bool bUseLan,
+                                                       FString LobbyName)
+{
+	GetMultiplayerGameInstanceSubsystem(WorldContextObject)->FindMultiplayerSession(bUseLan, LobbyName);
+}
+
 bool UCommonMultiplayerLibrary::UseLanMode(const UObject* WorldContextObject)
 {
 	bool bUseLanMode = true;
-	
+
 	if (USteamBlueprintFunctionLibrary::GetSteamIsOnline(WorldContextObject))
 	{
 		bUseLanMode = false;
 	}
-	
+
 	return bUseLanMode;
 }
 

@@ -3,6 +3,8 @@
 #include "MultiplayerGameInstanceSubsystem.h"
 #include "CommonMultiplayerSDK.h"
 #include "Kismet/GameplayStatics.h"
+#include "Online/OnlineSessionNames.h"
+#include "OnlineSessionSettings.h"
 
 UMultiplayerGameInstanceSubsystem::UMultiplayerGameInstanceSubsystem() :
 	OnCreateSessionCompleteDelegate(
@@ -14,7 +16,9 @@ UMultiplayerGameInstanceSubsystem::UMultiplayerGameInstanceSubsystem() :
 	OnSessionUserInviteAcceptedDelegate(
 		FOnSessionUserInviteAcceptedDelegate::CreateUObject(this, &ThisClass::OnSessionInviteAccepted)),
 	OnJoinSessionCompleteDelegate(
-		FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete))
+		FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete)),
+	OnFindSessionsCompleteDelegate(
+		FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionComplete))
 {
 	if (const IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get())
 	{
@@ -101,6 +105,32 @@ void UMultiplayerGameInstanceSubsystem::JoinMultiplayerSession(int32 LocalPlayer
 	SessionInterface->JoinSession(LocalPlayer, NAME_GameSession, SessionSearchResult);
 }
 
+void UMultiplayerGameInstanceSubsystem::FindMultiplayerSession(bool bUseLan, FString LobbyName)
+{
+	if (!SessionInterface.IsValid()) return;
+
+	UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("Find Session Name : %s, LAN : %hhd"), *LobbyName, bUseLan);
+
+	OnFindSessionCompleteDelegateHandle = SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(
+		OnFindSessionsCompleteDelegate);
+
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
+	SessionSearch->MaxSearchResults = 1000000;
+	SessionSearch->bIsLanQuery = bUseLan;
+	SessionSearch->QuerySettings.Set(SEARCH_MINSLOTSAVAILABLE, 0, EOnlineComparisonOp::GreaterThanEquals);
+	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+	SessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+
+	if (!bUseLan)
+		SessionSearch->QuerySettings.Set(FName("LobbyName"), LobbyName, EOnlineComparisonOp::Equals);
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef()))
+	{
+		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(OnFindSessionCompleteDelegateHandle);
+	}
+}
+
 void UMultiplayerGameInstanceSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
 	UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("On Create Session Complete SN : %s, b : %hhd"),
@@ -159,7 +189,7 @@ void UMultiplayerGameInstanceSubsystem::OnSessionInviteAccepted(bool bWasSuccess
 void UMultiplayerGameInstanceSubsystem::OnJoinSessionComplete(FName SessionName,
                                                               EOnJoinSessionCompleteResult::Type Result)
 {
-	UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("On Join Session  Complete PI : %s, b : %s"),
+	UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("On Join Session Complete PI : %s, b : %s"),
 	       *SessionName.ToString(), LexToString(Result));
 
 	if (SessionInterface)
@@ -172,6 +202,32 @@ void UMultiplayerGameInstanceSubsystem::OnJoinSessionComplete(FName SessionName,
 		if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
 		{
 			PlayerController->ClientTravel(TravelURL, TRAVEL_Absolute);
+		}
+	}
+}
+
+void UMultiplayerGameInstanceSubsystem::OnFindSessionComplete(bool bWasSuccessful)
+{
+	UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("On Find Session Complete b : %hhd, C : %d"), bWasSuccessful,
+	       SessionSearch->SearchResults.Num());
+	
+	if (SessionInterface)
+	{
+		SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(OnFindSessionCompleteDelegateHandle);
+
+		if (bWasSuccessful)
+		{
+			for (auto Result : SessionSearch->SearchResults)
+			{
+				UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("Session Found : %s"), *Result.Session.OwningUserName);
+
+				JoinMultiplayerSession(0, Result);
+				return;
+			}
+		}
+		else
+		{
+			UE_LOG(LogCommonMultiplayerSDK, Display, TEXT("No Sessions Found"));
 		}
 	}
 }
